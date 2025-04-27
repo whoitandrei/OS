@@ -23,7 +23,6 @@ void child(int* local_var) {
     printf("  [Child] Modified: global_var: %p, value = %d\n\t\t    local_var: %p, value = %d\n",(void*)&global_var, global_var, (void*)local_var, *local_var);
 
     //sleep(100);
-     
 }
 
 void parent(int* local_var) {
@@ -41,13 +40,20 @@ void parent(int* local_var) {
     }
     
     bool isNormallyExit = WIFEXITED(status); // проверяет, нормально ли завершен процесс
-    if (isNormallyExit == false) {
-        printf("Child terminated not normally\n");
+    if (isNormallyExit == true) {
+        int exitStatus = WEXITSTATUS(status);
+        printf("Child exited normally, exit code = %d\n", exitStatus);
         return;
     } 
-   
-    int exitStatus = WEXITSTATUS(status);
-    printf("Child exited normally, exit code = %d\n", exitStatus);
+    
+    bool isSignalExit = WIFSIGNALED(status); // проверяет, завершен ли процесс сигналом
+    if (isSignalExit == true) {
+        int signalStatus = WTERMSIG(status);
+        printf("Child killed by signal %d", signalStatus);
+        return;
+    }
+
+    printf("Child terminated not normally\n");
 }
 
 int main(void) {
