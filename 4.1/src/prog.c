@@ -4,111 +4,117 @@
 #include <string.h>
 #include <malloc.h>
 
-// Глобальные переменные
-int global_initialized = 42;    // iv
-int global_uninitialized;       // v
-const int global_const = 100;   // vi
+int global_initialized = 42;
+int global_uninitialized;
+const int global_const = 100;
 
 void A() {
     printf("A:\n");
 
-    // i. Локальная переменная в функции
     int local_var;
-    printf("[Локальная] Адрес: %p\n", (void*)&local_var);
-
-    // ii. Статическая переменная в функции
+    printf("[Local (uninitialized)] Address: %p\n", (void*)&local_var);
+    
     static int static_var;
-    printf("[Статическая] Адрес: %p\n", (void*)&static_var);
-
-    // iii. Константа в функции
+    printf("[Static (uninitialized)] Address: %p\n", (void*)&static_var);
+    
     const int const_var = 50;
-    printf("[Константа] Адрес: %p\n", (void*)&const_var);
-
-    //вывод глобальных переменных
-    printf("[Глобальная инициализированная] Адрес: %p\n", (void*)&global_initialized);
-    printf("[Глобальная неинициализированная] Адрес: %p\n", (void*)&global_uninitialized);
-    printf("[Глобальная константа] Адрес: %p\n\n", (void*)&global_const);
+    printf("[Constant] Address: %p\n", (void*)&const_var);
+    
+    printf("[Global initialized] Address: %p\n", (void*)&global_initialized);
+    printf("[Global uninitialized] Address: %p\n", (void*)&global_uninitialized);
+    printf("[Global constant] Address: %p\n\n", (void*)&global_const);
 }
 
 void B() {
-    printf("B:\nPID: %d\n\n", getpid());
+    int pid = getpid();
+    printf("B:\nPID: %d\n", pid);
+
+    printf("/proc/%d/maps", pid);
+
+    getchar();
 }
 
-int* dangerous_func() {
+int* return_local_variable() {
     int local = 123;
     int* res = &local;
     return res; 
 }
 
 void D() {
-    int* ptr = dangerous_func();
-    printf("D:\n[Опасный указатель] Адрес: %p, Значение: %d\n\n", (void*)ptr, *ptr);
+    int* ptr = return_local_variable();
+    printf("\nD:\n[Local variable] Address: %p, Value: %d\n\n", (void*)ptr, *ptr);
 }
 
 void E() {
-    // i. Выделяем буфер и инициализируем
     char *buf1 = malloc(100);
-    if (!buf1) {
+    if (buf1 == NULL) {
         perror("malloc");
         return;
     }
+    
     strncpy(buf1, "Hello world", 99);
     buf1[99] = '\0'; 
-
-    // ii-iii. Вывод содержимого
+    
     printf("E: (malloc)\nbuf1: %s (%p)\n", buf1, (void*)buf1);
 
-    // iv. Освобождаем память
     free(buf1);
-
-    // v. Вывод после free (UB, но подавим предупреждение для демо)
+    
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wuse-after-free"
-    printf("После free(buf1): %s\n", buf1); 
+    printf("After free(buf1): %s\n", buf1); 
     #pragma GCC diagnostic pop
-
-    // vi. Выделяем новый буфер
+    
     char *buf2 = malloc(100);
-    if (!buf2) {
+    if (buf2 == NULL) {
         perror("malloc");
         return;
     }
+    
     strncpy(buf2, "Hello again", 99);
     buf2[99] = '\0';
-
-    // vii-viii. Вывод
+    
     printf("buf2: %s (%p)\n", buf2, (void*)buf2);
-
-    // ix-x. Освобождение по смещённому указателю (ошибка)
+    
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wfree-nonheap-object"
     char *mid = buf2 + 50;
+    buf2 = mid;
     free(mid); 
     #pragma GCC diagnostic pop
-
-    free(buf2);
 }
 
 void H() {
-    // g. Установка переменной (в shell: export MY_VAR="test")
     const char* var_name = "MY_VAR";
+    printf("H:\nName: %s\n", var_name);
 
-    // h.i-ii. Чтение и изменение
-    printf("H: \nИсходное значение: %s\n", getenv(var_name));
-    setenv(var_name, "new_value", 1); // 1 = перезаписать
-    printf("Новое значение: %s\n", getenv(var_name));
+    char* var_value = getenv(var_name);
+    if (var_value == NULL) {
+        // обрабатываю это как ошибку, так как по заданию нужно увидеть различие до и после для уже созданной переменной
+        fprintf(stderr, "no such env var: %s\n", var_name);
+        return;
+    }
 
-    // j. После завершения программы в shell:
-    // echo $MY_VAR → вернёт исходное значение
+    printf("Original value: %s\n", var_value);
+
+    int returned_setenv = setenv(var_name, "new_value", 1);
+    if (returned_setenv == -1) {
+        perror("setenv");
+        return;
+    }
+
+    var_value = getenv(var_name);
+    if (var_value == NULL) {
+        fprintf(stderr, "no such env var");
+        return;
+    }
+    printf("New value: %s\n\n", var_value);
 }
-
 
 int main() {
     A();
     B();
     D();
-    //E();
     H();
-
+    E();
     return 0;
 }
