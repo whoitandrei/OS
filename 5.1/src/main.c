@@ -32,15 +32,15 @@ void parent(int* local_var) {
 
     sleep(30);
 
-    printf("  [Parent after fork and sleep]: global_var: %p, value = %d\n\t\t    local_var: %p, value = %d\n",(void*)&global_var, global_var, (void*)local_var, *local_var);
-
     int status;
     pid_t w = wait(&status);
     if (w == ERR) {
         perror("wait");
         exit(EXIT_FAILURE);
     }
-    
+
+    printf("  [Parent after fork and wait]: global_var: %p, value = %d\n\t\t    local_var: %p, value = %d\n",(void*)&global_var, global_var, (void*)local_var, *local_var);
+
     bool isNormallyExit = WIFEXITED(status); // проверяет, нормально ли завершен процесс
     if (isNormallyExit == true) {
         int exitStatus = WEXITSTATUS(status);
