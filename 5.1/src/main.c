@@ -16,12 +16,13 @@ void child(int* local_var) {
     printf("  [Child] Address of global_var: %p, value: %d\n", (void*)&global_var, global_var);
     printf("  [Child] Address of local_var:  %p, value: %d\n", (void*)local_var, *local_var);
 
-   
+    getchar();
 
     global_var = 3;
     *local_var = 4;
     printf("  [Child] Modified: global_var: %p, value = %d\n\t\t    local_var: %p, value = %d\n",(void*)&global_var, global_var, (void*)local_var, *local_var);
 
+    getchar();
     //sleep(100);
 }
 
