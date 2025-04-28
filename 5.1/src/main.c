@@ -36,7 +36,7 @@ void parent(int* local_var) {
 
     int status;
     pid_t w = wait(&status);
-    if (w == -1) {
+    if (w == ERR) {
         perror("wait");
         exit(EXIT_FAILURE);
     }
