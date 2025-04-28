@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 #define ERR -1
+#define IS_CHILD 0
 
 int global_var = 1; 
 
@@ -74,7 +75,7 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    if (pid == 0) {
+    if (pid == IS_CHILD) {
         child(&local_var);
         _exit(5); 
     } 
