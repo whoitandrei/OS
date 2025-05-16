@@ -36,10 +36,12 @@ void parent(int* local_var) {
 
     int status;
     pid_t w = wait(&status);
-    if (w == -1) {
+    if (w == ERR) {
         perror("wait");
         exit(EXIT_FAILURE);
     }
+
+    printf("  [Parent after fork and wait]: global_var: %p, value = %d\n\t\t    local_var: %p, value = %d\n",(void*)&global_var, global_var, (void*)local_var, *local_var);
     
     bool isNormallyExit = WIFEXITED(status); // проверяет, нормально ли завершен процесс
     if (isNormallyExit == true) {
