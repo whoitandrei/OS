@@ -22,38 +22,62 @@ void *mythread(void *arg) {
     pid_t ppid = getppid();
     pid_t tid = gettid();
     pthread_t self_pthr = pthread_self();
+    int err;
     
-    pthread_mutex_lock(&output_mutex);
-    printf("Thread %d IDs: PID=%d, PPID=%d, TID=%d\n", 
-           thread_num, pid, ppid, tid);
+    err = pthread_mutex_lock(&output_mutex);
+    if (err != 0) {
+        printf("lock error");
+        return NULL;
+    }
     
-    char res = (pthread_equal((pthread_t)tid, self_pthr) == 0) ? 'Y' : 'N';
-    printf("pthread_equal() result: %c\n", res);
-    
+    printf("Thread %d IDs: PID=%d, PPID=%d, TID=%d, TID(self) = %lu\n", thread_num, pid, ppid, tid, self_pthr);
     printf("Thread %d addresses: local=%p, static=%p, const=%p, global=%p\n",
            thread_num, &local_var, &local_static_var, &local_const_var, &global_var);
-    pthread_mutex_unlock(&output_mutex);
+    
+    err = pthread_mutex_unlock(&output_mutex);
+    if (err != 0) {
+        printf("ulock error");
+        return NULL;
+    }
     
     local_var += thread_num;
     
-    pthread_mutex_lock(&global_var_mutex);
+    err = pthread_mutex_lock(&global_var_mutex);
+    if (err != 0) {
+        printf("lock error");
+        return NULL;
+    }
+    
     global_var += thread_num;
     int current_global = global_var;
-    pthread_mutex_unlock(&global_var_mutex);
     
-    pthread_mutex_lock(&output_mutex);
-    printf("Thread %d: local_var=%d, global_var=%d\n", 
-           thread_num, local_var, current_global);
-    pthread_mutex_unlock(&output_mutex);
+    err = pthread_mutex_unlock(&global_var_mutex);
+    if (err != 0) {
+        printf("unlock error");
+        return NULL;
+    }
     
-    return NULL;
+    err = pthread_mutex_lock(&output_mutex);
+    if (err != 0) {
+        printf("lock error");
+        return NULL;
+    }
+    
+    printf("Thread %d: local_var=%d, global_var=%d\n", thread_num, local_var, current_global);
+    
+    err = pthread_mutex_unlock(&output_mutex);
+    if (err != 0) {
+        printf("unlock error");
+        return NULL;
+    }
+    
+    return (void*)self_pthr;
 }
 
 int main() {
     pthread_t threads[5];
     int thread_nums[5];
     int err;
-    
     
     for (int i = 0; i < 5; i++) {
         thread_nums[i] = i + 1;
@@ -64,18 +88,28 @@ int main() {
         }
         
         pthread_mutex_lock(&output_mutex);
-        printf("\nCreated thread %d\n", i+1);
+        printf("\nCreated thread %d, tid: %lu\n", i+1, threads[i]);
         pthread_mutex_unlock(&output_mutex);
     }
 
+    pthread_t results[5];
     for (int i = 0; i < 5; i++) {
-        err = pthread_join(threads[i], NULL);
+        void* thread_return;
+        err = pthread_join(threads[i], &thread_return);
         if (err) {
             printf("main: pthread_join() failed: %s\n", strerror(err));
             return -1;
         }
+
+        results[i] = (pthread_t)thread_return;
     }
-    
+
+    for (int i = 0; i < 5; ++i) {
+        pthread_mutex_lock(&output_mutex);
+        char res = (pthread_equal((pthread_t)results[i], threads[i]) != 0) ? 'Y' : 'N';
+        printf("pthread_equal() in MAIN result %d: %c\n", i+1, res);
+        pthread_mutex_unlock(&output_mutex);
+    }    
 
     pthread_mutex_destroy(&global_var_mutex);
     pthread_mutex_destroy(&output_mutex);
