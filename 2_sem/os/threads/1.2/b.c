@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-void *mythread(void *arg) {
+void *mythread() {
     printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
     
     int *result = malloc(sizeof(int));

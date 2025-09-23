@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void *mythread(void *arg) {
+void *mythread() {
     printf("mythread [%d %d %d]: Created as detached and finished\n", getpid(), getppid(), gettid());
     return NULL;
 }
@@ -32,7 +32,6 @@ int main() {
         return -1;
     }
 
-    printf("Press Ctrl+C to stop\n");
 
     while (1) {
         err = pthread_create(&tid, &attr, mythread, NULL);
@@ -44,8 +43,9 @@ int main() {
         counter++;
         if (counter % 100 == 0) {
             printf("main [%d %d %d]: Created %d threads\n", getpid(), getppid(), gettid(), counter);
-            sleep(1);
         }
+
+        //sleep(1);
     }
 
     err = pthread_attr_destroy(&attr);

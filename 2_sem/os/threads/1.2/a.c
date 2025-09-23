@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void *mythread(void *arg) {
+void *mythread() {
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
 	return NULL;
 }

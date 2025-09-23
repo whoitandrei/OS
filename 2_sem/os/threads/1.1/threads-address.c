@@ -106,6 +106,8 @@ int main() {
         results[i] = (pthread_t)thread_return;
     }
 
+    sleep(10000);
+
     for (int i = 0; i < 5; ++i) {
         pthread_mutex_lock(&output_mutex);
         char res = (pthread_equal((pthread_t)results[i], threads[i]) != 0) ? 'Y' : 'N';

@@ -6,8 +6,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-void *mythread(void *arg) {
-    pthread_detach(pthread_self());
+void *mythread() {
+    int err = pthread_detach(pthread_self());
+    if (err != 0) {
+        printf("prhtead_detach error");
+        return NULL;
+    }
     printf("mythread [%d %d %d]: Created as detached and finished\n", getpid(), getppid(), gettid());
     return NULL;
 }
@@ -18,7 +22,6 @@ int main() {
     int counter = 0;
 
     printf("main [%d %d %d]: Starting detached thread creation\n", getpid(), getppid(), gettid());
-    printf("Press Ctrl+C to stop\n");
 
     while (1) {
         err = pthread_create(&tid, NULL, mythread, NULL);
@@ -30,8 +33,9 @@ int main() {
         counter++;
         if (counter % 100 == 0) {
             printf("main [%d %d %d]: Created %d threads\n", getpid(), getppid(), gettid(), counter);
-            sleep(1);
         }
+
+        //sleep(1);
     }
 
     printf("main [%d %d %d]: Exiting after %d threads\n", getpid(), getppid(), gettid(), counter);
