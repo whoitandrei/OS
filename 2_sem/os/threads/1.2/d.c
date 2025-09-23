@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#define SUCCESS 0
+#define ERR -1
 
 void *mythread() {
     printf("mythread [%d %d %d]: Created and finished\n", getpid(), getppid(), gettid());
@@ -31,14 +33,9 @@ int main() {
             break;
         }*/
 
-        counter++;
-        if (counter % 100 == 0) {
-            printf("main [%d %d %d]: Created %d threads\n", getpid(), getppid(), gettid(), counter);
-        }
-
         //sleep(1);
     }
 
     printf("main [%d %d %d]: Exiting after %d threads\n", getpid(), getppid(), gettid(), counter);
-    return 0;
+    return SUCCESS;
 }

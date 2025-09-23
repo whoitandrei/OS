@@ -5,10 +5,12 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#define SUCCESS 0
+#define ERR -1
 
 void *mythread() {
     int err = pthread_detach(pthread_self());
-    if (err != 0) {
+    if (err != SUCCESS) {
         printf("prhtead_detach error");
         return NULL;
     }
@@ -25,19 +27,14 @@ int main() {
 
     while (1) {
         err = pthread_create(&tid, NULL, mythread, NULL);
-        if (err) {
+        if (err != SUCCESS) {
             printf("main: pthread_create() failed: %s\n", strerror(err));
             break;
-        }
-
-        counter++;
-        if (counter % 100 == 0) {
-            printf("main [%d %d %d]: Created %d threads\n", getpid(), getppid(), gettid(), counter);
         }
 
         //sleep(1);
     }
 
     printf("main [%d %d %d]: Exiting after %d threads\n", getpid(), getppid(), gettid(), counter);
-    return 0;
+    return SUCCESS;
 }

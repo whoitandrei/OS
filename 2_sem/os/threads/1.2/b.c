@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#define SUCCESS 0
+#define ERR -1
 
 void *mythread() {
     printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
@@ -25,20 +27,20 @@ int main() {
     printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
 
     err = pthread_create(&tid, NULL, mythread, NULL);
-    if (err) {
+    if (err != SUCCESS) {
         printf("main: pthread_create() failed: %s\n", strerror(err));
-        return -1;
+        return ERR;
     }
 
     err = pthread_join(tid, (void**)&thread_result);
-    if (err) {
+    if (err != SUCCESS) {
         printf("main: pthread_join() failed: %s\n", strerror(err));
-        return -1;
+        return ERR;
     }
 
     printf("main [%d %d %d]: Received value: %d\n", getpid(), getppid(), gettid(), *thread_result);
     
     free(thread_result);
     printf("main [%d %d %d]: Memory freed\n", getpid(), getppid(), gettid());
-    return 0;
+    return SUCCESS;
 }
