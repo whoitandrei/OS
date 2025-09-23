@@ -7,10 +7,14 @@
 #include <unistd.h>
 #define SUCCESS 0
 #define ERR -1
+#define COUNT_THREAD 10
 
 void *mythread() {
     pthread_t self_pthr = pthread_self();
-	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
+	printf("mythread [%d %d %d %lu]: Hello from mythread!\n", getpid(), getppid(), gettid(), self_pthr);
+
+    char res = (pthread_equal((pthread_t)gettid(), self_pthr) != 0) ? 'Y' : 'N';
+    printf("pthread_equal() result: %c\n", res);
 	return (void*)self_pthr;
 }
 
@@ -29,26 +33,11 @@ int main() {
             printf("pthread_create() failed: %s\n", strerror(err));
             return ERR;
         }
-        
+    
         printf("\nCreated thread %d, tid: %lu\n", i+1, threads[i]);
     }
 
-    pthread_t results[5];
-    for (int i = 0; i < 5; i++) {
-        void* thread_return;
-        err = pthread_join(threads[i], &thread_return);
-        if (err != SUCCESS) {
-            printf("main: pthread_join() failed: %s\n", strerror(err));
-            return ERR;
-        }
-
-        results[i] = (pthread_t)thread_return;
-    }
-
-    for (int i = 0; i < 5; ++i) {
-        char res = (pthread_equal((pthread_t)results[i], threads[i]) != 0) ? 'Y' : 'N';
-        printf("pthread_equal() in MAIN result %d: %c\n", i+1, res);
-    }    
-	return 0;
+       
+	pthread_exit(NULL);
 }
 
