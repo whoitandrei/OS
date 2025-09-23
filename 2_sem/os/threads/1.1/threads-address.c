@@ -7,6 +7,7 @@
 #include <unistd.h>      
 #include <sys/syscall.h>  
 #define SUCCESS 0
+#define ERR -1
 
 int global_var = 100;
 pthread_mutex_t global_var_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,7 +74,7 @@ void *mythread(void *arg) {
         return NULL;
     }
     
-    return (void*)self_pthr;
+    return NULL;
 }
 
 int main() {
@@ -86,7 +87,7 @@ int main() {
         err = pthread_create(&threads[i], NULL, mythread, &thread_nums[i]);
         if (err != SUCCESS) {
             printf("pthread_create() failed: %s\n", strerror(err));
-            return -1;
+            return ERR;
         }
         
         pthread_mutex_lock(&output_mutex);
@@ -94,26 +95,16 @@ int main() {
         pthread_mutex_unlock(&output_mutex);
     }
 
-    pthread_t results[5];
+
     for (int i = 0; i < 5; i++) {
-        void* thread_return;
-        err = pthread_join(threads[i], &thread_return);
+        err = pthread_join(threads[i], NULL);
         if (err != SUCCESS) {
             printf("main: pthread_join() failed: %s\n", strerror(err));
-            return -1;
+            return ERR;
         }
-
-        results[i] = (pthread_t)thread_return;
     }
 
-    sleep(10000);
+    //sleep(10000);
 
-    for (int i = 0; i < 5; ++i) {
-        pthread_mutex_lock(&output_mutex);
-        char res = (pthread_equal((pthread_t)results[i], threads[i]) != 0) ? 'Y' : 'N';
-        printf("pthread_equal() in MAIN result %d: %c\n", i+1, res);
-        pthread_mutex_unlock(&output_mutex);
-    }    
-
-    return 0;
+    return SUCCESS;
 }
