@@ -8,12 +8,18 @@
 #include <stdlib.h>
 #define SUCCESS 0
 #define ERR -1
+#define STR "hello world"
 
 void *mythread() {
     printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
     
-    char *message = malloc(20 * sizeof(char));
-    strcpy(message, "hello world");
+    char *message = malloc((strlen(STR) + 1) * sizeof(char));
+    if (message == NULL) {
+        printf("malloc error");
+        return NULL;
+    }
+
+    strcpy(message, STR);
     
     printf("mythread [%d %d %d]: Returning string: %s\n", getpid(), getppid(), gettid(), message);
     return (void*)message;
