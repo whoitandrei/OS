@@ -1,0 +1,70 @@
+execve("bin/result", ["bin/result"], 0xfffff35d4b80 /* 35 vars */) = 0
+brk(NULL)                               = 0xbda172650000
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xec58eb39e000
+faccessat(AT_FDCWD, "/etc/ld.so.preload", R_OK) = -1 ENOENT (No such file or directory)
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+fstat(3, {st_mode=S_IFREG|0644, st_size=23083, ...}) = 0
+mmap(NULL, 23083, PROT_READ, MAP_PRIVATE, 3, 0) = 0xec58eb398000
+close(3)                                = 0
+openat(AT_FDCWD, "/lib/aarch64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0\267\0\1\0\0\0\360\206\2\0\0\0\0\0"..., 832) = 832
+fstat(3, {st_mode=S_IFREG|0755, st_size=1722920, ...}) = 0
+mmap(NULL, 1892240, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_DENYWRITE, -1, 0) = 0xec58eb197000
+mmap(0xec58eb1a0000, 1826704, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0) = 0xec58eb1a0000
+munmap(0xec58eb197000, 36864)           = 0
+munmap(0xec58eb35e000, 28560)           = 0
+mprotect(0xec58eb33a000, 77824, PROT_NONE) = 0
+mmap(0xec58eb34d000, 20480, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x19d000) = 0xec58eb34d000
+mmap(0xec58eb352000, 49040, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0xec58eb352000
+close(3)                                = 0
+set_tid_address(0xec58eb39efd0)         = 2910
+set_robust_list(0xec58eb39efe0, 24)     = 0
+rseq(0xec58eb39f620, 0x20, 0, 0xd428bc00) = 0
+mprotect(0xec58eb34d000, 12288, PROT_READ) = 0
+mprotect(0xbda15540f000, 4096, PROT_READ) = 0
+mprotect(0xec58eb3a3000, 8192, PROT_READ) = 0
+prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
+munmap(0xec58eb398000, 23083)           = 0
+rt_sigaction(SIGRT_1, {sa_handler=0xec58eb222840, sa_mask=[], sa_flags=SA_ONSTACK|SA_RESTART|SA_SIGINFO}, NULL, 8) = 0
+rt_sigprocmask(SIG_UNBLOCK, [RTMIN RT_1], NULL, 8) = 0
+mmap(NULL, 8454144, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0xec58ea990000
+mprotect(0xec58ea9a0000, 8388608, PROT_READ|PROT_WRITE) = 0
+getrandom("\x4a\xb5\xb6\x50\x21\x08\x2a\xaf", 8, GRND_NONBLOCK) = 8
+brk(NULL)                               = 0xbda172650000
+brk(0xbda172671000)                     = 0xbda172671000
+rt_sigprocmask(SIG_BLOCK, ~[], [], 8)   = 0
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0xec58eb19f270, parent_tid=0xec58eb19f270, exit_signal=0, stack=0xec58ea990000, stack_size=0x80ea60, tls=0xec58eb19f8e0} => {parent_tid=[2911]}, 88) = 2911
+rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0
+write(1, "\nCreated thread 1, tid: 25986664"..., 40) = 40
+mmap(NULL, 8454144, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0xec58ea180000
+mprotect(0xec58ea190000, 8388608, PROT_READ|PROT_WRITE) = 0
+rt_sigprocmask(SIG_BLOCK, ~[], [], 8)   = 0
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0xec58ea98f270, parent_tid=0xec58ea98f270, exit_signal=0, stack=0xec58ea180000, stack_size=0x80ea60, tls=0xec58ea98f8e0} => {parent_tid=[2912]}, 88) = 2912
+rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0
+write(1, "\nCreated thread 2, tid: 25986663"..., 40) = 40
+mmap(NULL, 8454144, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0xec58e9970000
+mprotect(0xec58e9980000, 8388608, PROT_READ|PROT_WRITE) = 0
+rt_sigprocmask(SIG_BLOCK, ~[], [], 8)   = 0
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0xec58ea17f270, parent_tid=0xec58ea17f270, exit_signal=0, stack=0xec58e9970000, stack_size=0x80ea60, tls=0xec58ea17f8e0} => {parent_tid=[0]}, 88) = 2913
+rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0
+write(1, "\nCreated thread 3, tid: 25986662"..., 40) = 40
+mmap(NULL, 8454144, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0xec58e9160000
+mprotect(0xec58e9170000, 8388608, PROT_READ|PROT_WRITE) = 0
+rt_sigprocmask(SIG_BLOCK, ~[], [], 8)   = 0
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0xec58e996f270, parent_tid=0xec58e996f270, exit_signal=0, stack=0xec58e9160000, stack_size=0x80ea60, tls=0xec58e996f8e0} => {parent_tid=[0]}, 88) = 2914
+rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0
+write(1, "\nCreated thread 4, tid: 25986662"..., 40) = 40
+mmap(NULL, 8454144, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_STACK, -1, 0) = 0xec58e8950000
+mprotect(0xec58e8960000, 8388608, PROT_READ|PROT_WRITE) = 0
+rt_sigprocmask(SIG_BLOCK, ~[], [], 8)   = 0
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0xec58e915f270, parent_tid=0xec58e915f270, exit_signal=0, stack=0xec58e8950000, stack_size=0x80ea60, tls=0xec58e915f8e0} => {parent_tid=[2915]}, 88) = 2915
+rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0
+write(1, "\nCreated thread 5, tid: 25986661"..., 40) = 40
+munmap(0xec58ea990000, 8454144)         = 0
+write(1, "pthread_equal() in MAIN result 1"..., 36) = 36
+write(1, "pthread_equal() in MAIN result 2"..., 36) = 36
+write(1, "pthread_equal() in MAIN result 3"..., 36) = 36
+write(1, "pthread_equal() in MAIN result 4"..., 36) = 36
+write(1, "pthread_equal() in MAIN result 5"..., 36) = 36
+exit_group(0)                           = ?
++++ exited with 0 +++

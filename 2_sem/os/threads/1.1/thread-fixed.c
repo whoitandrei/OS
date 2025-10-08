@@ -5,8 +5,10 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#define SUCCESS 0
+#define ERR 1
 
-void *mythread(void *arg) {
+void *mythread() {
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
 	return NULL;
 }
@@ -18,11 +20,17 @@ int main() {
 	printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
 
 	err = pthread_create(&tid, NULL, mythread, NULL);
-	if (err) {
+	if (err != SUCCESS) {
 	    printf("main: pthread_create() failed: %s\n", strerror(err));
-		return -1;
+		return ERR;
 	}
-	
-	return 0;
+
+	/*err = pthread_join(tid, NULL);
+	if (err != SUCCESS) {
+		printf("main: pthread_join() failed: %s\n", strerror(err));
+		return ERR;
+	}*/
+
+	pthread_exit(NULL);
 }
 
