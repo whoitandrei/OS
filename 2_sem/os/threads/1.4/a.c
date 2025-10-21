@@ -6,12 +6,13 @@
 
 #define SUCCESS 0
 #define TRUE 1
+#define SLEEP_PRINT 1
 #define WAIT_PRINT 5
 
 void* print_loop() {
     while (TRUE) {
         printf("Thread %d is running\n", gettid());
-        sleep(1); 
+        sleep(SLEEP_PRINT); 
     }
     return NULL;
 }

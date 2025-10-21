@@ -10,15 +10,16 @@
 #define SUCCESS 0
 #define ERR 1
 
+
 struct testStruct
 {
     int number;
-    char *message;
+    char* message;
 };
 
-void *mythread(void *arg)
+void *mythread(void* arg)
 {
-    struct testStruct *data = (struct testStruct *)arg;
+    struct testStruct* data = (struct testStruct *)arg;
     printf("mythread [tid: %d]: number = %d, message = %s\n", gettid(), data->number, data->message);
     return NULL;
 }

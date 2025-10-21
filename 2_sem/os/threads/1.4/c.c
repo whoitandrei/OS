@@ -12,6 +12,7 @@
 #define EXEC TRUE
 #define WAIT_THREAD 5
 #define WAIT_PRINT 1
+#define NULL_TERM_CHAR 1
 #define STR "hello world"
 
 void cleanup(void* arg) {
@@ -21,7 +22,7 @@ void cleanup(void* arg) {
 }
 
 void* print_hello() {
-    char *message = malloc((strlen(STR) + 1) * sizeof(char));
+    char *message = malloc((strlen(STR) + NULL_TERM_CHAR) * sizeof(char));
     if (message == NULL) {
         printf("malloc error");
         return NULL;

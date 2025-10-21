@@ -8,17 +8,21 @@
 #include <malloc.h>
 #define SUCCESS 0
 #define ERR 1
+#define STR "hello world"
+#define STRCPY_OFFSET 1
+
 
 struct testStruct
 {
     int number;
-    char *message;
+    char* message;
 };
 
 void *mythread(void* arg) {
-    struct testStruct *data = (struct testStruct*)arg;
+    struct testStruct* data = (struct testStruct*)arg;
 
     printf("mythread [tid: %d]: number = %d, message = %s\n", gettid(), data->number, data->message);
+    free(data->message);
     free(data);
     return NULL;
 }
@@ -31,11 +35,21 @@ int main() {
     struct testStruct *data = malloc(sizeof(struct testStruct));
     if (data == NULL) {
         printf("malloc error");
-        return 0;
+        return SUCCESS;
     }
 
     data->number = 34;
-    data->message = "Hello from mythread!";
+    
+    data->message = malloc(strlen(STR) * sizeof(char) + STRCPY_OFFSET);
+    if (data->message == NULL) {
+        printf("data->message malloc err");
+        return SUCCESS;
+    }
+    strcpy(data->message, STR);
+
+
+    printf("message pointer addr - %p, message addr - %p, pid - %d\n", &(data->message), (data->message), getpid());
+    //sleep(1000);
     
     err = pthread_attr_init(&attr);
     if (err != SUCCESS) {
