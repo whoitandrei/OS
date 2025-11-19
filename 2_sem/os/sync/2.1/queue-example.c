@@ -10,12 +10,16 @@
 
 #include "queue.h"
 
+#define SUCCESS 0
+#define QUEUE_SIZE 1000
+
+
 int main() {
 	queue_t *q;
 
 	printf("main: [%d %d %d]\n", getpid(), getppid(), gettid());
 
-	q = queue_init(1000);
+	q = queue_init(QUEUE_SIZE);
 
 	for (int i = 0; i < 10; i++) {
 		int ok = queue_add(q, i);
@@ -36,6 +40,6 @@ int main() {
 
 	queue_destroy(q);
 
-	return 0;
+	return SUCCESS;
 }
 

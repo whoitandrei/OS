@@ -13,10 +13,10 @@ INCLUDE_DIR="."
 all: ${TARGET_1} ${TARGET_2}
 
 ${TARGET_1}: queue.h ${SRCS_1}
-	${CC} ${CFLAGS} -I${INCLUDE_DIR} ${SRCS_1} ${LIBS} -o ${TARGET_1}
+	${CC} ${CFLAGS} -I${INCLUDE_DIR} ${SRCS_1} ${LIBS} -o bin/${TARGET_1}
 
 ${TARGET_2}: queue.h ${SRCS_2}
-	${CC} ${CFLAGS} -I${INCLUDE_DIR} ${SRCS_2} ${LIBS} -o ${TARGET_2}
+	${CC} ${CFLAGS} -I${INCLUDE_DIR} ${SRCS_2} ${LIBS} -o bin/${TARGET_2}
 
 clean:
 	${RM} -f *.o ${TARGET_1} ${TARGET_2}

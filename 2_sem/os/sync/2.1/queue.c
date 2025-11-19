@@ -4,6 +4,9 @@
 
 #include "queue.h"
 
+#define SUCCESS 0
+#define ERR 1
+
 void *qmonitor(void *arg) {
 	queue_t *q = (queue_t *)arg;
 
@@ -44,7 +47,29 @@ queue_t* queue_init(int max_count) {
 }
 
 void queue_destroy(queue_t *q) {
-	// TODO: It's needed to implement this function
+	if (q == NULL)
+		return;
+
+	int err;
+	err = pthread_cancel(q->qmonitor_tid);
+	if (err != SUCCESS) {
+		printf("pthread cancel err\n");
+	}
+
+	err = pthread_join(q->qmonitor_tid, NULL);
+	if (err != SUCCESS) {
+		printf("pthread join err\n");
+	}
+
+	qnode_t *current = q->first;
+    while (current != NULL) {
+        qnode_t *temp = current;
+        current = current->next;
+        free(temp);
+    }
+
+	free(q);
+	printf("all resourses destroyed\n");
 }
 
 int queue_add(queue_t *q, int val) {

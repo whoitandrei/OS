@@ -6,14 +6,23 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <pthread.h>
 #include <sched.h>
 
 #include "queue.h"
 
 #define RED "\033[41m"
 #define NOCOLOR "\033[0m"
+#define QUEUE_SIZE 1000000
+#define SLEEP_TIME 10
+
+#define CANCEL_AND_JOIN(thread, name) do { \
+    int cancel_err = pthread_cancel(thread); \
+    if (cancel_err != SUCCESS) \
+        printf("main: pthread_cancel(%s) failed: %s\n", name, strerror(cancel_err)); \
+    int join_err = pthread_join(thread, NULL); \
+    if (join_err != SUCCESS) \
+        printf("main: pthread_join(%s) failed: %s\n", name, strerror(join_err)); \
+} while(0)
 
 void set_cpu(int n) {
 	int err;
@@ -24,8 +33,8 @@ void set_cpu(int n) {
 	CPU_SET(n, &cpuset);
 
 	err = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
-	if (err) {
-		printf("set_cpu: pthread_setaffinity failed for cpu %d\n", n);
+	if (err != SUCCESS) {
+		printf("set_cpu: pthread_setaffinity failed: %s\n", strerror(err));
 		return;
 	}
 
@@ -37,12 +46,13 @@ void *reader(void *arg) {
 	queue_t *q = (queue_t *)arg;
 	printf("reader [%d %d %d]\n", getpid(), getppid(), gettid());
 
-	set_cpu(1);
+	set_cpu(2);
 
-	while (1) {
+	while (2) {
+		pthread_testcancel();
 		int val = -1;
 		int ok = queue_get(q, &val);
-		if (!ok)
+		if (ok != QUEUE_OP_SUCCESS)
 			continue;
 
 		if (expected != val)
@@ -62,41 +72,46 @@ void *writer(void *arg) {
 	set_cpu(1);
 
 	while (1) {
+		pthread_testcancel();
 		int ok = queue_add(q, i);
-		if (!ok)
+		if (ok != QUEUE_OP_SUCCESS) {
+			//usleep(1);
 			continue;
+		}
 		i++;
+		//usleep(1);
 	}
 
 	return NULL;
 }
 
 int main() {
-	pthread_t tid;
+	pthread_t reader_tid, writer_tid;
 	queue_t *q;
 	int err;
-
 	printf("main [%d %d %d]\n", getpid(), getppid(), gettid());
+	q = queue_init(QUEUE_SIZE);
 
-	q = queue_init(1000000);
-
-	err = pthread_create(&tid, NULL, reader, q);
-	if (err) {
+	err = pthread_create(&reader_tid, NULL, reader, q);
+	if (err != SUCCESS) {
 		printf("main: pthread_create() failed: %s\n", strerror(err));
-		return -1;
+		queue_destroy(q);
+		return ERROR;
 	}
 
 	sched_yield();
 
-	err = pthread_create(&tid, NULL, writer, q);
-	if (err) {
-		printf("main: pthread_create() failed: %s\n", strerror(err));
-		return -1;
+	err = pthread_create(&writer_tid, NULL, writer, q);
+	if (err != SUCCESS) {
+		CANCEL_AND_JOIN(reader_tid, "reader");
+		queue_destroy(q);
+		return ERROR;
 	}
+	sleep(SLEEP_TIME);
+	CANCEL_AND_JOIN(reader_tid, "reader");
+	CANCEL_AND_JOIN(writer_tid, "writer");
 
-	// TODO: join threads
-
-	pthread_exit(NULL);
-
-	return 0;
+	queue_destroy(q);
+	printf("main: all threads were joined, exiting...\n");
+	return SUCCESS;
 }
