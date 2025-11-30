@@ -34,7 +34,7 @@ queue_t* queue_init(int max_count) {
     queue_t *q = malloc(sizeof(queue_t));
     if (q == NULL) {
         printf("Cannot allocate memory for a queue\n");
-        abort();
+        return NULL;;
     }
 
     q->first = NULL;
@@ -49,7 +49,7 @@ queue_t* queue_init(int max_count) {
     if (err != SUCCESS) {
         printf("queue_init: pthread_mutex_init failed: %s\n", strerror(err));
         free(q);
-        abort();
+        return NULL;;
     }
 
     err = pthread_cond_init(&q->cond, NULL);
@@ -59,7 +59,7 @@ queue_t* queue_init(int max_count) {
         if (err != SUCCESS)
             printf("queue_init: pthread_mutex_destroy failed: %s\n", strerror(err));
         free(q);
-        abort();
+        return NULL;;
     }
 
     err = pthread_create(&q->qmonitor_tid, NULL, qmonitor, q);
@@ -72,7 +72,7 @@ queue_t* queue_init(int max_count) {
         if (err != SUCCESS)
             printf("queue_init: pthread_mutex_destroy failed: %s\n", strerror(err));
         free(q);
-        abort();
+        return NULL;;
     }
 
     return q;

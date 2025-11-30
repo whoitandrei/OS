@@ -34,7 +34,7 @@ queue_t *queue_init(int max_count) {
 	queue_t *q = malloc(sizeof(queue_t));
 	if (q == NULL) {
 		printf("Cannot allocate memory for a queue\n");
-		abort();
+		return NULL;;
 	}
 
 	q->first = NULL;
@@ -48,7 +48,7 @@ queue_t *queue_init(int max_count) {
 	if (err != SUCCESS) {
 		printf("queue_init: sem_init(available_slots) failed: %s\n", strerror(errno));
 		free(q);
-		abort();
+		return NULL;;
 	}
 
 	err = sem_init(&q->available_items, PROCESS_PRIVATE, NO_ITEMS);
@@ -58,7 +58,7 @@ queue_t *queue_init(int max_count) {
 		if (err != SUCCESS)
 			printf("queue_init: sem_destroy(available_slots) failed: %s\n", strerror(errno));
 		free(q);
-		abort();
+		return NULL;;
 	}
 
 	err = sem_init(&q->queue_access, PROCESS_PRIVATE, ACCESS_ALLOWED);
@@ -71,7 +71,7 @@ queue_t *queue_init(int max_count) {
 		if (err != SUCCESS)
 			printf("queue_init: sem_destroy(available_items) failed: %s\n", strerror(errno));
 		free(q);
-		abort();
+		return NULL;;
 	}
 
 	err = pthread_create(&q->qmonitor_tid, NULL, qmonitor, q);
@@ -87,7 +87,7 @@ queue_t *queue_init(int max_count) {
 		if (err != SUCCESS)
 			printf("queue_init: sem_destroy(queue_access) failed: %s\n", strerror(errno));
 		free(q);
-		abort();
+		return NULL;;
 	}
 
 	return q;

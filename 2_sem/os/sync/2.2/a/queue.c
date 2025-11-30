@@ -9,7 +9,7 @@ void *qmonitor(void *arg) {
 	int err;
 	printf("qmonitor: [%d %d %d]\n", getpid(), getppid(), gettid());
 
-	while (true) {
+	while (1) {
 		err = pthread_spin_lock(&q->lock);
 		if (err != SUCCESS) {
 			printf("qmonitor: pthread_spin_lock failed: %s\n", strerror(err));
