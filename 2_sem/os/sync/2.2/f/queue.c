@@ -129,7 +129,12 @@ int queue_add(queue_t *q, int val) {
         return QUEUE_OP_FAILURE;
     }
     while (q->count == q->max_count) {
-        pthread_cond_wait(&q->cond, &q->lock);
+        err = pthread_cond_wait(&q->cond, &q->lock);
+        if (err != SUCCESS) {
+            printf("wait err\n");
+            free(new);
+            return QUEUE_OP_FAILURE;
+        }
     }
     err = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     if (err != SUCCESS) {
