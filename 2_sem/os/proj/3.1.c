@@ -8,17 +8,22 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdatomic.h>
+
+atomic_ulong copied_files = 0;
 
 #define TRUE 1
 #define ERROR -1
 #define SUCCESS 0
 #define REQUIRES_ARGS 3
+#define PATH_SEEN 1
+#define PATH_NOT_SEEN 0
 
 #define BUFFER_SIZE 4096
 #define PATH_MAX 4096
 #define MAX_THREADS 8
 #define SLEEP_TIMEOUT 3
-#define QUEUE_TIMEOUT 100000
+#define QUEUE_TIMEOUT_US 100000
 
 #define ACCESS_RIGHTS_COPYING (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
 #define MANIP_RIGHTS_COPYING (O_WRONLY | O_CREAT | O_TRUNC)
@@ -26,214 +31,603 @@
 #define CURRENT_DIR "."
 #define PARENT_DIR ".."
 
-typedef struct thread_context {
+typedef struct thread_context
+{
     char *src_path;
     char *dst_path;
     struct thread_context *next;
 } thread_context_t;
 
-typedef struct {
+typedef struct
+{
     thread_context_t *head;
     thread_context_t *tail;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+    pthread_cond_t cond_done;
     int stop;
+    int pending;
 } task_queue_t;
 
-task_queue_t queue;
+typedef struct seen_node
+{
+    char *path;
+    struct seen_node *next;
+} seen_node_t;
 
-void queue_init(task_queue_t *q) {
-    q->head = q->tail = NULL;
-    pthread_mutex_init(&q->mutex, NULL);
-    pthread_cond_init(&q->cond, NULL);
-    q->stop = 0;
-}
+task_queue_t discovery_queue;
+task_queue_t work_queue;
 
-void queue_push(task_queue_t *q, thread_context_t *task) {
-    pthread_mutex_lock(&q->mutex);
-    task->next = NULL;
-    if (q->tail != NULL) q->tail->next = task;
-    else q->head = task;
-    q->tail = task;
-    pthread_cond_signal(&q->cond);
-    pthread_mutex_unlock(&q->mutex);
-}
+int err;
+/* --- queue helpers --- */
 
-thread_context_t* queue_pop(task_queue_t *q) {
-    pthread_mutex_lock(&q->mutex);
-    while (q->head == NULL && q->stop != TRUE) {
-        pthread_cond_wait(&q->cond, &q->mutex);
+int seen_path(seen_node_t *head, const char *path)
+{
+    seen_node_t *cur = head;
+    while (cur != NULL)
+    {
+        err = strcmp(cur->path, path);
+        if (err == SUCCESS)
+            return PATH_SEEN;
+        cur = cur->next;
     }
-    if (q->stop == TRUE) {
+    return PATH_NOT_SEEN;
+}
+
+seen_node_t *add_seen(seen_node_t **head, const char *path)
+{
+    seen_node_t *node = malloc(sizeof(seen_node_t));
+    if (node == NULL)
+        return NULL;
+    node->path = strdup(path);
+    node->next = *head;
+    *head = node;
+    return node;
+}
+
+void queue_init(task_queue_t *q)
+{
+    q->head = q->tail = NULL;
+    q->stop = 0;
+    q->pending = 0;
+
+    err = pthread_mutex_init(&q->mutex, NULL);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_init(): %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    err = pthread_cond_init(&q->cond, NULL);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_cond_init(): %s\n", strerror(errno));
+        pthread_mutex_destroy(&q->mutex);
+        exit(EXIT_FAILURE);
+    }
+    err = pthread_cond_init(&q->cond_done, NULL);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_cond_init(done): %s\n", strerror(errno));
+        pthread_cond_destroy(&q->cond);
+        pthread_mutex_destroy(&q->mutex);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void queue_push(task_queue_t *q, thread_context_t *task)
+{
+    if (!task)
+        return;
+    task->next = NULL;
+
+    err = pthread_mutex_lock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() in queue_push\n");
+        return;
+    }
+
+    if (q->tail != NULL)
+        q->tail->next = task;
+    else
+        q->head = task;
+    q->tail = task;
+
+    q->pending++;
+    err = pthread_cond_signal(&q->cond);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_cond_signal() in queue_push\n");
+    }
+
+    err = pthread_mutex_unlock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_unlock() in queue_push\n");
+    }
+}
+
+thread_context_t *queue_pop(task_queue_t *q)
+{
+    if (pthread_mutex_lock(&q->mutex) != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() in queue_pop\n");
+        return NULL;
+    }
+
+    while (q->head == NULL && q->stop == 0)
+    {
+        err = pthread_cond_wait(&q->cond, &q->mutex);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_cond_wait() in queue_pop\n");
+            pthread_mutex_unlock(&q->mutex);
+            return NULL;
+        }
+    }
+
+    if (q->stop)
+    {
         pthread_mutex_unlock(&q->mutex);
         return NULL;
     }
+
     thread_context_t *task = q->head;
     q->head = task->next;
-    if (q->head == NULL) q->tail = NULL;
-    pthread_mutex_unlock(&q->mutex);
+    if (q->head == NULL)
+        q->tail = NULL;
+
+    err = pthread_mutex_unlock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_unlock() in queue_pop\n");
+    }
+
     return task;
 }
 
-void queue_destroy(task_queue_t *q) {
-    pthread_mutex_lock(&q->mutex);
-    q->stop = TRUE;
-    pthread_cond_broadcast(&q->cond);
-    pthread_mutex_unlock(&q->mutex);
-    pthread_mutex_destroy(&q->mutex);
-    pthread_cond_destroy(&q->cond);
+void queue_task_done(task_queue_t *q)
+{
+    err = pthread_mutex_lock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() in queue_task_done\n");
+        return;
+    }
+
+    q->pending--;
+    if (q->pending < 0)
+        q->pending = 0;
+
+    if (q->pending == 0)
+    {
+        err = pthread_cond_signal(&q->cond_done);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_cond_signal(cond_done)\n");
+        }
+    }
+
+    err = pthread_mutex_unlock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_unlock() in queue_task_done\n");
+    }
 }
 
-void thread_context_t_destructor(thread_context_t *context) {
-    if (context == NULL) return;
+void queue_wait_empty(task_queue_t *q)
+{
+    err = pthread_mutex_lock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() in queue_wait_empty\n");
+        return;
+    }
+
+    while (q->pending > 0)
+    {
+        err = pthread_cond_wait(&q->cond_done, &q->mutex);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_cond_wait(cond_done)\n");
+            break;
+        }
+    }
+
+    err = pthread_mutex_unlock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_unlock() in queue_wait_empty\n");
+    }
+}
+
+void queue_destroy(task_queue_t *q)
+{
+    err = pthread_mutex_lock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() in queue_destroy\n");
+        return;
+    }
+
+    q->stop = 1;
+
+    err = pthread_cond_broadcast(&q->cond);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_cond_broadcast() in queue_destroy\n");
+    }
+    pthread_cond_broadcast(&q->cond_done);
+
+    err = pthread_mutex_unlock(&q->mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_unlock() in queue_destroy\n");
+    }
+
+    pthread_cond_destroy(&q->cond);
+    pthread_cond_destroy(&q->cond_done);
+    pthread_mutex_destroy(&q->mutex);
+}
+
+void thread_context_t_destructor(thread_context_t *context)
+{
+    if (context == NULL)
+        return;
     free(context->src_path);
     free(context->dst_path);
     free(context);
 }
 
-void copy_file(thread_context_t *context) {
-    int src_fd, dst_fd;
+void copy_file(thread_context_t *context)
+{
+    if (!context)
+        return;
+
+    int src_fd = -1, dst_fd = -1;
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read, bytes_written;
 
     src_fd = open(context->src_path, O_RDONLY);
-    while (src_fd == ERROR && errno == EMFILE) {
+    while (src_fd == ERROR && errno == EMFILE)
+    {
         sleep(SLEEP_TIMEOUT);
         src_fd = open(context->src_path, O_RDONLY);
     }
-    if (src_fd < 0) {
-        fprintf(stderr, "<ERROR>:  open() failed: can not open file in src_path\n");
+    if (src_fd < 0)
+    {
+        fprintf(stderr, "<ERROR> open(src='%s'): %s\n", context->src_path, strerror(errno));
         return;
     }
 
     dst_fd = open(context->dst_path, MANIP_RIGHTS_COPYING, ACCESS_RIGHTS_COPYING);
-    while (dst_fd == ERROR && errno == EMFILE) {
+    while (dst_fd == ERROR && errno == EMFILE)
+    {
         sleep(SLEEP_TIMEOUT);
         dst_fd = open(context->dst_path, MANIP_RIGHTS_COPYING, ACCESS_RIGHTS_COPYING);
     }
-    if (dst_fd < 0) {
-        fprintf(stderr, "<ERROR>: open() failed: can not open file in dst_path\n");
+    if (dst_fd < 0)
+    {
+        fprintf(stderr, "<ERROR> open(dst='%s'): %s\n", context->dst_path, strerror(errno));
         close(src_fd);
         return;
     }
 
     bytes_read = read(src_fd, buffer, sizeof(buffer));
-    while (bytes_read > 0) {
-        bytes_written = write(dst_fd, buffer, bytes_read);
-        if (bytes_written < 0 || bytes_written != bytes_read) {
-            fprintf(stderr, "<ERROR>: write() failed: Error writing to destination file\n");
-            break;
+    while (bytes_read > 0)
+    {
+        ssize_t to_write = bytes_read;
+        char *p = buffer;
+        while (to_write > 0)
+        {
+            bytes_written = write(dst_fd, p, to_write);
+            if (bytes_written < 0)
+            {
+                if (errno == EINTR)
+                    continue;
+                fprintf(stderr, "<ERROR> write(dst='%s'): %s\n", context->dst_path, strerror(errno));
+                close(src_fd);
+                close(dst_fd);
+                return;
+            }
+            to_write -= bytes_written;
+            p += bytes_written;
         }
         bytes_read = read(src_fd, buffer, sizeof(buffer));
     }
 
-    if (bytes_read < 0) {
-        fprintf(stderr, "<ERROR>: %s(): read() failed: %s\n", __func__, strerror(errno));
+    if (bytes_read < 0)
+    {
+        fprintf(stderr, "<ERROR> read(src='%s'): %s\n", context->src_path, strerror(errno));
     }
 
-    close(src_fd);
-    close(dst_fd);
+    err = close(src_fd);
+    if (err < 0)
+    {
+        fprintf(stderr, "<ERROR> close(src): %s\n", strerror(errno));
+    }
+    err = close(dst_fd);
+    if (err < 0)
+    {
+        fprintf(stderr, "<ERROR> close(dst): %s\n", strerror(errno));
+    }
+    atomic_fetch_add(&copied_files, 1);
 }
 
+void *worker_thread(void *arg)
+{
+    (void)arg;
 
-void copy_directory(thread_context_t *context) {
-    DIR *dir;
-    struct dirent *entry;
-    struct stat statbuf;
-    char src_path[PATH_MAX], dst_path[PATH_MAX];
-
-    if (strcmp(context->src_path, context->dst_path) == SUCCESS) return;
-
-    dir = opendir(context->src_path);
-    while (dir == NULL && errno == EMFILE) { 
-        sleep(SLEEP_TIMEOUT); 
-        dir = opendir(context->src_path); 
-    }
-    if (dir == NULL) {
-        fprintf(stderr, "<ERROR> opendir() failed: cannot open source directory\n");
-        return;
-    }
-
-    mkdir(context->dst_path, DIR_ACCESS_RIGHTS);
-
-    entry = readdir(dir);
-    while (entry != NULL) {
-        if (strcmp(entry->d_name, CURRENT_DIR) == SUCCESS || strcmp(entry->d_name, PARENT_DIR) == SUCCESS) {
-            entry = readdir(dir);
-            continue;
-        }
-
-        snprintf(src_path, sizeof(src_path), "%s/%s", context->src_path, entry->d_name);
-        snprintf(dst_path, sizeof(dst_path), "%s/%s", context->dst_path, entry->d_name);
-
-        if (lstat(src_path, &statbuf) != SUCCESS) {
-            entry = readdir(dir);
-            continue;
-        }
-
-        thread_context_t *new_task = malloc(sizeof(thread_context_t));
-        new_task->src_path = strdup(src_path);
-        new_task->dst_path = strdup(dst_path);
-
-        queue_push(&queue, new_task);
-        entry = readdir(dir);
-    }
-    closedir(dir);
-}
-
-
-void* worker_thread() {
-    while (TRUE) {
-        thread_context_t *task = queue_pop(&queue);
-        if (task == NULL) break; 
+    while (TRUE)
+    {
+        thread_context_t *task = queue_pop(&work_queue);
+        if (task == NULL)
+            break;
 
         struct stat st;
-        if (lstat(task->src_path, &st) != SUCCESS) { 
-            thread_context_t_destructor(task); 
-            continue; 
+        err = lstat(task->src_path, &st);
+        if (err == SUCCESS && S_ISREG(st.st_mode))
+        {
+            copy_file(task);
         }
 
-        if (S_ISDIR(st.st_mode)) 
-            copy_directory(task);
-        else if (S_ISREG(st.st_mode)) 
-            copy_file(task);
-
         thread_context_t_destructor(task);
+        queue_task_done(&work_queue);
     }
+
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
-    if (argc != REQUIRES_ARGS) { 
-        fprintf(stderr, "Usage: %s <src> <dst>\n", argv[0]); 
-        return EXIT_FAILURE; 
+int process_directory(thread_context_t *task)
+{
+    err = mkdir(task->dst_path, DIR_ACCESS_RIGHTS);
+    if (err != SUCCESS && errno != EEXIST)
+    {
+        fprintf(stderr, "<ERROR> mkdir('%s'): %s\n",
+                task->dst_path, strerror(errno));
+        thread_context_t_destructor(task);
+        queue_task_done(&discovery_queue);
+        return EXIT_FAILURE;
     }
 
-    queue_init(&queue);
+    DIR *dir = opendir(task->src_path);
+    if (dir == NULL)
+    {
+        fprintf(stderr, "<ERROR> opendir('%s'): %s\n",
+                task->src_path, strerror(errno));
+        thread_context_t_destructor(task);
+        queue_task_done(&discovery_queue);
+        return EXIT_FAILURE;
+    }
+
+    struct dirent *entry;
+    entry = readdir(dir);
+    while (entry != NULL)
+    {
+        if (strcmp(entry->d_name, CURRENT_DIR) == SUCCESS ||
+            strcmp(entry->d_name, PARENT_DIR) == SUCCESS)
+        {
+            entry = readdir(dir);
+            continue;
+        }
+
+        char src[PATH_MAX];
+        char dst[PATH_MAX];
+
+        err = snprintf(src, sizeof(src), "%s/%s",
+                       task->src_path, entry->d_name);
+        if (err < 0 || err >= (int)sizeof(src))
+        {
+            entry = readdir(dir);
+            continue;
+        }
+
+        err = snprintf(dst, sizeof(dst), "%s/%s",
+                       task->dst_path, entry->d_name);
+        if (err < 0 || err >= (int)sizeof(dst))
+        {
+            entry = readdir(dir);
+            continue;
+        }
+
+        thread_context_t *child = malloc(sizeof(thread_context_t));
+        if (child == NULL)
+        {
+            entry = readdir(dir);
+            continue;
+        }
+
+        child->src_path = strdup(src);
+        child->dst_path = strdup(dst);
+        child->next = NULL;
+
+        if (child->src_path == NULL || child->dst_path == NULL)
+        {
+            thread_context_t_destructor(child);
+            entry = readdir(dir);
+            continue;
+        }
+
+        queue_push(&discovery_queue, child);
+        entry = readdir(dir);
+    }
+
+    err = closedir(dir);
+    if (err != SUCCESS)
+    {
+        printf("closedir error");
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+void *task_creator_thread(void *arg)
+{
+    (void)arg;
+
+    seen_node_t *seen_head = NULL;
+
+    while (TRUE)
+    {
+        thread_context_t *task = queue_pop(&discovery_queue);
+        if (task == NULL)
+            break;
+
+        err = seen_path(seen_head, task->src_path);
+        if (err == PATH_SEEN)
+        {
+            thread_context_t_destructor(task);
+            queue_task_done(&discovery_queue);
+            continue;
+        }
+
+        add_seen(&seen_head, task->src_path);
+
+        struct stat st;
+        err = lstat(task->src_path, &st);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<WARN> lstat('%s'): %s\n",
+                    task->src_path, strerror(errno));
+            thread_context_t_destructor(task);
+            queue_task_done(&discovery_queue);
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode))
+        {
+            err = process_directory(task);
+            if (err == EXIT_FAILURE)
+            {
+                thread_context_t_destructor(task);
+                queue_task_done(&discovery_queue);
+                continue;
+            }
+        }
+        else if (S_ISREG(st.st_mode))
+        {
+            queue_push(&work_queue, task);
+            queue_task_done(&discovery_queue);
+            continue;
+        }
+
+        thread_context_t_destructor(task);
+        queue_task_done(&discovery_queue);
+    }
+
+    queue_wait_empty(&discovery_queue);
+
+    while (seen_head)
+    {
+        seen_node_t *tmp = seen_head;
+        seen_head = seen_head->next;
+        free(tmp->path);
+        free(tmp);
+    }
+
+    return NULL;
+}
+
+/* --- main --- */
+
+int main(int argc, char *argv[])
+{
+    if (argc != REQUIRES_ARGS)
+    {
+        fprintf(stderr, "Usage: %s <src> <dst>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    queue_init(&discovery_queue);
+    queue_init(&work_queue);
 
     thread_context_t *root_task = malloc(sizeof(thread_context_t));
+    if (!root_task)
+    {
+        fprintf(stderr, "<ERROR> malloc() for root task failed\n");
+        queue_destroy(&discovery_queue);
+        return EXIT_FAILURE;
+    }
     root_task->src_path = strdup(argv[1]);
     root_task->dst_path = strdup(argv[2]);
-    queue_push(&queue, root_task);
-
-    pthread_t threads[MAX_THREADS];
-    for (int i = 0; i < MAX_THREADS; i++) {
-        pthread_create(&threads[i], NULL, worker_thread, NULL);
+    root_task->next = NULL;
+    if (!root_task->src_path || !root_task->dst_path)
+    {
+        fprintf(stderr, "<ERROR> strdup() for root paths failed\n");
+        thread_context_t_destructor(root_task);
+        queue_destroy(&discovery_queue);
+        queue_destroy(&work_queue);
+        return EXIT_FAILURE;
     }
 
-    while (TRUE) {
-        pthread_mutex_lock(&queue.mutex);
-        int empty = (queue.head == NULL ? 1 : 0);
-        pthread_mutex_unlock(&queue.mutex);
-        if (empty) break;
-        usleep(QUEUE_TIMEOUT);
+    queue_push(&discovery_queue, root_task);
+
+    // создаём поток task_creator
+    pthread_t creator;
+    int err = pthread_create(&creator, NULL, task_creator_thread, NULL);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_create(task_creator): %s\n", strerror(err));
+        queue_destroy(&discovery_queue);
+        queue_destroy(&work_queue);
+        return EXIT_FAILURE;
     }
 
-    queue_destroy(&queue);
-    for (int i = 0; i < MAX_THREADS; i++) {
-        pthread_join(threads[i], NULL);
+    // создаём worker потоки
+    pthread_t workers[MAX_THREADS];
+    int created = 0;
+    for (int i = 0; i < MAX_THREADS; i++)
+    {
+        err = pthread_create(&workers[i], NULL, worker_thread, NULL);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_create(worker %d): %s\n", i, strerror(err));
+            // отменяем уже созданные
+            for (int j = 0; j < created; j++)
+                pthread_cancel(workers[j]);
+            for (int j = 0; j < created; j++)
+                pthread_join(workers[j], NULL);
+            pthread_cancel(creator);
+            pthread_join(creator, NULL);
+            queue_destroy(&discovery_queue);
+            queue_destroy(&work_queue);
+            return EXIT_FAILURE;
+        }
+        created++;
     }
 
+    queue_wait_empty(&discovery_queue);
+    queue_wait_empty(&work_queue);
+
+    err = pthread_mutex_lock(&work_queue.mutex);
+    if (err != SUCCESS)
+    {
+        fprintf(stderr, "<ERROR> pthread_mutex_lock() before stop work_queue\n");
+    }
+    else
+    {
+        work_queue.stop = 1;
+        err = pthread_cond_broadcast(&work_queue.cond);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_cond_broadcast() work_queue\n");
+        }
+        err = pthread_mutex_unlock(&work_queue.mutex);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<ERROR> pthread_mutex_unlock() work_queue\n");
+        }
+    }
+
+    for (int i = 0; i < created; i++)
+    {
+        pthread_join(workers[i], NULL);
+    }
+
+    queue_destroy(&discovery_queue);
+    queue_destroy(&work_queue);
+
+    printf("Copied files: %lu\n", atomic_load(&copied_files));
     printf("copying end\n");
     return EXIT_SUCCESS;
 }
