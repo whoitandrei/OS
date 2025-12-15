@@ -59,7 +59,6 @@ task_queue_t discovery_queue;
 task_queue_t work_queue;
 
 int err;
-/* --- queue helpers --- */
 
 int seen_path(seen_node_t *head, const char *path)
 {
@@ -528,8 +527,8 @@ void *task_creator_thread(void *arg)
     return NULL;
 }
 
-/* --- main --- */
 
+/* --- main --- */
 int main(int argc, char *argv[])
 {
     if (argc != REQUIRES_ARGS)
@@ -562,7 +561,6 @@ int main(int argc, char *argv[])
 
     queue_push(&discovery_queue, root_task);
 
-    // создаём поток task_creator
     pthread_t creator;
     int err = pthread_create(&creator, NULL, task_creator_thread, NULL);
     if (err != SUCCESS)
@@ -573,7 +571,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // создаём worker потоки
     pthread_t workers[MAX_THREADS];
     int created = 0;
     for (int i = 0; i < MAX_THREADS; i++)
@@ -582,7 +579,6 @@ int main(int argc, char *argv[])
         if (err != SUCCESS)
         {
             fprintf(stderr, "<ERROR> pthread_create(worker %d): %s\n", i, strerror(err));
-            // отменяем уже созданные
             for (int j = 0; j < created; j++)
                 pthread_cancel(workers[j]);
             for (int j = 0; j < created; j++)
