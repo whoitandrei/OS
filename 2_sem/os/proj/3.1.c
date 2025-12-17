@@ -31,17 +31,17 @@ atomic_ulong copied_files = 0;
 #define CURRENT_DIR "."
 #define PARENT_DIR ".."
 
-typedef struct thread_context
+typedef struct task_data
 {
     char *src_path;
     char *dst_path;
-    struct thread_context *next;
-} thread_context_t;
+    struct task_data *next;
+} task_data_queue;
 
 typedef struct
 {
-    thread_context_t *head;
-    thread_context_t *tail;
+    task_data_queue *head;
+    task_data_queue *tail;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     pthread_cond_t cond_done;
@@ -49,40 +49,10 @@ typedef struct
     int pending;
 } task_queue_t;
 
-typedef struct seen_node
-{
-    char *path;
-    struct seen_node *next;
-} seen_node_t;
-
 task_queue_t discovery_queue;
 task_queue_t work_queue;
 
 int err;
-
-int seen_path(seen_node_t *head, const char *path)
-{
-    seen_node_t *cur = head;
-    while (cur != NULL)
-    {
-        err = strcmp(cur->path, path);
-        if (err == SUCCESS)
-            return PATH_SEEN;
-        cur = cur->next;
-    }
-    return PATH_NOT_SEEN;
-}
-
-seen_node_t *add_seen(seen_node_t **head, const char *path)
-{
-    seen_node_t *node = malloc(sizeof(seen_node_t));
-    if (node == NULL)
-        return NULL;
-    node->path = strdup(path);
-    node->next = *head;
-    *head = node;
-    return node;
-}
 
 void queue_init(task_queue_t *q)
 {
@@ -113,7 +83,7 @@ void queue_init(task_queue_t *q)
     }
 }
 
-void queue_push(task_queue_t *q, thread_context_t *task)
+void queue_push(task_queue_t *q, task_data_queue *task)
 {
     if (!task)
         return;
@@ -146,7 +116,7 @@ void queue_push(task_queue_t *q, thread_context_t *task)
     }
 }
 
-thread_context_t *queue_pop(task_queue_t *q)
+task_data_queue *queue_pop(task_queue_t *q)
 {
     if (pthread_mutex_lock(&q->mutex) != SUCCESS)
     {
@@ -171,7 +141,7 @@ thread_context_t *queue_pop(task_queue_t *q)
         return NULL;
     }
 
-    thread_context_t *task = q->head;
+    task_data_queue *task = q->head;
     q->head = task->next;
     if (q->head == NULL)
         q->tail = NULL;
@@ -269,7 +239,7 @@ void queue_destroy(task_queue_t *q)
     pthread_mutex_destroy(&q->mutex);
 }
 
-void thread_context_t_destructor(thread_context_t *context)
+void task_data_queue_destructor(task_data_queue *context)
 {
     if (context == NULL)
         return;
@@ -278,7 +248,7 @@ void thread_context_t_destructor(thread_context_t *context)
     free(context);
 }
 
-void copy_file(thread_context_t *context)
+void copy_file(task_data_queue *context)
 {
     if (!context)
         return;
@@ -359,7 +329,7 @@ void *worker_thread(void *arg)
 
     while (TRUE)
     {
-        thread_context_t *task = queue_pop(&work_queue);
+        task_data_queue *task = queue_pop(&work_queue);
         if (task == NULL)
             break;
 
@@ -370,21 +340,21 @@ void *worker_thread(void *arg)
             copy_file(task);
         }
 
-        thread_context_t_destructor(task);
+        task_data_queue_destructor(task);
         queue_task_done(&work_queue);
     }
 
     return NULL;
 }
 
-int process_directory(thread_context_t *task)
+int process_directory(task_data_queue *task)
 {
     err = mkdir(task->dst_path, DIR_ACCESS_RIGHTS);
     if (err != SUCCESS && errno != EEXIST)
     {
         fprintf(stderr, "<ERROR> mkdir('%s'): %s\n",
                 task->dst_path, strerror(errno));
-        thread_context_t_destructor(task);
+        task_data_queue_destructor(task);
         queue_task_done(&discovery_queue);
         return EXIT_FAILURE;
     }
@@ -394,7 +364,7 @@ int process_directory(thread_context_t *task)
     {
         fprintf(stderr, "<ERROR> opendir('%s'): %s\n",
                 task->src_path, strerror(errno));
-        thread_context_t_destructor(task);
+        task_data_queue_destructor(task);
         queue_task_done(&discovery_queue);
         return EXIT_FAILURE;
     }
@@ -429,7 +399,7 @@ int process_directory(thread_context_t *task)
             continue;
         }
 
-        thread_context_t *child = malloc(sizeof(thread_context_t));
+        task_data_queue *child = malloc(sizeof(task_data_queue));
         if (child == NULL)
         {
             entry = readdir(dir);
@@ -442,12 +412,31 @@ int process_directory(thread_context_t *task)
 
         if (child->src_path == NULL || child->dst_path == NULL)
         {
-            thread_context_t_destructor(child);
+            task_data_queue_destructor(child);
             entry = readdir(dir);
             continue;
         }
 
-        queue_push(&discovery_queue, child);
+        struct stat st;
+        err = lstat(child->src_path, &st);
+        if (err != SUCCESS)
+        {
+            fprintf(stderr, "<WARN> lstat('%s'): %s\n",
+                    task->src_path, strerror(errno));
+            task_data_queue_destructor(task);
+            queue_task_done(&discovery_queue);
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode))
+        {
+            queue_push(&discovery_queue, child);
+        }
+        else if (S_ISREG(st.st_mode))
+        {
+            queue_push(&work_queue, child);
+        }
+
         entry = readdir(dir);
     }
 
@@ -464,69 +453,29 @@ void *task_creator_thread(void *arg)
 {
     (void)arg;
 
-    seen_node_t *seen_head = NULL;
-
     while (TRUE)
     {
-        thread_context_t *task = queue_pop(&discovery_queue);
+        task_data_queue *task = queue_pop(&discovery_queue);
         if (task == NULL)
             break;
 
-        err = seen_path(seen_head, task->src_path);
-        if (err == PATH_SEEN)
+
+        err = process_directory(task);
+        if (err == EXIT_FAILURE)
         {
-            thread_context_t_destructor(task);
+            task_data_queue_destructor(task);
             queue_task_done(&discovery_queue);
             continue;
         }
 
-        add_seen(&seen_head, task->src_path);
-
-        struct stat st;
-        err = lstat(task->src_path, &st);
-        if (err != SUCCESS)
-        {
-            fprintf(stderr, "<WARN> lstat('%s'): %s\n",
-                    task->src_path, strerror(errno));
-            thread_context_t_destructor(task);
-            queue_task_done(&discovery_queue);
-            continue;
-        }
-
-        if (S_ISDIR(st.st_mode))
-        {
-            err = process_directory(task);
-            if (err == EXIT_FAILURE)
-            {
-                thread_context_t_destructor(task);
-                queue_task_done(&discovery_queue);
-                continue;
-            }
-        }
-        else if (S_ISREG(st.st_mode))
-        {
-            queue_push(&work_queue, task);
-            queue_task_done(&discovery_queue);
-            continue;
-        }
-
-        thread_context_t_destructor(task);
+        task_data_queue_destructor(task);
         queue_task_done(&discovery_queue);
     }
 
     queue_wait_empty(&discovery_queue);
 
-    while (seen_head)
-    {
-        seen_node_t *tmp = seen_head;
-        seen_head = seen_head->next;
-        free(tmp->path);
-        free(tmp);
-    }
-
     return NULL;
 }
-
 
 /* --- main --- */
 int main(int argc, char *argv[])
@@ -540,7 +489,7 @@ int main(int argc, char *argv[])
     queue_init(&discovery_queue);
     queue_init(&work_queue);
 
-    thread_context_t *root_task = malloc(sizeof(thread_context_t));
+    task_data_queue *root_task = malloc(sizeof(task_data_queue));
     if (!root_task)
     {
         fprintf(stderr, "<ERROR> malloc() for root task failed\n");
@@ -553,7 +502,7 @@ int main(int argc, char *argv[])
     if (!root_task->src_path || !root_task->dst_path)
     {
         fprintf(stderr, "<ERROR> strdup() for root paths failed\n");
-        thread_context_t_destructor(root_task);
+        task_data_queue_destructor(root_task);
         queue_destroy(&discovery_queue);
         queue_destroy(&work_queue);
         return EXIT_FAILURE;
