@@ -459,7 +459,6 @@ void *task_creator_thread(void *arg)
         if (task == NULL)
             break;
 
-
         err = process_directory(task);
         if (err == EXIT_FAILURE)
         {
